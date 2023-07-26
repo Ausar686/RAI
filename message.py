@@ -1,8 +1,3 @@
-# Created by: Ausar686
-# Last edited: 2023-07-21
-# Comment: Initial commit.
-
-
 from datetime import datetime
 from typing import List, Any
 
