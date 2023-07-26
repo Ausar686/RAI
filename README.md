@@ -1,2 +1,2 @@
-# rai_chat_bot
-AI-powered (OpenAI API) chat bot for multi-user chats
+# RAI
+AI-powered (OpenAI API) tools for chat-like interactions.
