@@ -70,7 +70,7 @@ class QAGPT:
             print("[ERROR]: If nothing seems to work, try to make a new OpenAI API key on official website in your account.")
             raise e
         
-    def form_message(request: str, role: str="user") -> dict:
+    def form_message(self, request: str, role: str="user") -> dict:
         """
         Takes text request and a given role in GPT-API and transforms it into a dictionary.
         Args:

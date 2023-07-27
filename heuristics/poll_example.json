@@ -1,0 +1,74 @@
+[
+    {
+        "question": "Как ты себя сегодня чувствуешь?",
+        "variants": [
+            {
+                "answer": "Супер",
+                "reply": "Так держать!",
+                "emotion": "positive",
+                "call": null
+            },
+            {
+                "answer": "Нормально",
+                "reply": "Отлично! Давай сделаем твоё настроение ещё лучше!",
+                "emotion": "neutral",
+                "call": null
+            },
+            {
+                "answer": "Бывало и получше",
+                "reply": "У тебя что-то случилось... Что тебя беспокоит?",
+                "emotion": "negative",
+                "call": {
+                    "name": "ask_condition",
+                    "kwargs": {
+                        "condition": "Самочувствие: Бывало и получше"
+                    }
+                }
+            },
+            {
+                "answer": null,
+                "reply": null,
+                "emotion": null,
+                "call": {
+                    "name": "analyse_input"
+                }
+            }
+        ]
+    },
+    {
+        "question": "Находишься ли ты сейчас в состоянии стресса?",
+        "variants": [
+            {
+                "answer": "Вообще нет",
+                "reply": "Великолепно! Ты молодец!",
+                "emotion": "positive",
+                "call": null
+            },
+            {
+                "answer": "Немного",
+                "reply": "Отлично! Давай сделаем твоё настроение ещё лучше!",
+                "emotion": "neutral",
+                "call": null
+            },
+            {
+                "answer": "Да...",
+                "reply": "Понимаю... Что вызывает у тебя стресс?",
+                "emotion": "negative",
+                "call": {
+                    "name": "ask_condition",
+                    "kwargs": {
+                        "condition": "Стресс: Сильный стресс"
+                    }
+                }
+            },
+            {
+                "answer": null,
+                "reply": null,
+                "emotion": null,
+                "call": {
+                    "name": "analyse_input"
+                }
+            }
+        ]
+    }
+]
