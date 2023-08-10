@@ -1,14 +1,14 @@
 import json
 import re
 
-from ..qagpt import QAGPT
+from ..bot.qagpt import QAGPT
 
 
 class PollGenerator:
     
-    def __init__(self, sphere: str, example: str=None, log: bool=True) -> None:
+    def __init__(self, sphere: str, example_path: str=None, log: bool=True) -> None:
         if example is not None:
-            with open(example, "r", encoding="utf-8") as file:
+            with open(example_path, "r", encoding="utf-8") as file:
                 self.example = file.read()
         else:
             self.example = ''

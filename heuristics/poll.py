@@ -18,6 +18,7 @@ class Poll:
             <CONTEXT>
             """
         self._str = self.to_str()
+        return
         
     def load(self, json_path: str) -> None:
         with open(json_path, "r") as json_file:
@@ -79,12 +80,15 @@ class Poll:
         return res
 
     def analyse_input(self) -> None:
-        print(f"{self._bot}: Я только учусь воспринимать человеческий текст. Я записал твой ответ, но, пожалуйста, постарайся в будущем отвечать, используя предоставленные варианты.")
+        print(f"{self._bot}: Я только учусь воспринимать человеческий текст в мини-тестах и опросах.")
+        print(f"{self._bot}: Я записал твой ответ, но, пожалуйста, постарайся в будущем отвечать, используя предоставленные варианты.")
+        return
 
     def ask_condition(self, condition: str) -> None:
-        print(f"{self._bot}: Ты сейчас испытываешь состояние '{condition}'\n\tРасскажи, пожалуйста, поподробнее.")
-        descr = input("[User]: ")
-        print(f"{self._bot}: Спасибо! Я подумаю, как тебе помочь...")
+        print(f"{self._bot}: Ты сейчас испытываешь состояние '{condition}'\n\tРасскажи, пожалуйста, поподробнее, чтобы я мог тебе помочь.")
+        descr = self.input()
+        self.user_answers[condition] = descr
+        print(f"{self._bot}: Спасибо! Я немного подумаю, как тебе помочь и чуть позже напишу!")
         return
     
     def __repr__(self) -> str:
