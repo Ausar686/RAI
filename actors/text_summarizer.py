@@ -1,17 +1,18 @@
 from typing import Union
 from collections import deque
 
+from .base_actor import BaseActor
 from .token_counter import TokenCounter
 from .qagpt import QAGPT
 
 
-class TextSummarizer:
+class TextSummarizer(BaseActor):
     
     # These constants can be edited
     # if they prove to be non-sufficient for output storage.
     _limits = {
-        "gpt-3.5-turbo-16k": 15000,
-        "gpt-4-32k": 30000
+        "gpt-3.5-turbo-16k": 15500,
+        "gpt-4-32k": 31500
     }
     
     _upgrades = {
@@ -22,13 +23,17 @@ class TextSummarizer:
     _max_words = 200
     
     def __init__(self, model: str="gpt-3.5-turbo", n_words: int=50):
+        super().__init__(model)
         if n_words > self._max_words:
             raise ValueError("Too many words for summary. Maximum 200 words allowed.")
-        self.model = model
-        self.upgrade_model()
         self.n_words = n_words
         self.token_counter = TokenCounter(self.model)
         self.gpt = QAGPT(model=self.model)
+        return
+
+    def set_model(self, model: str) -> None:
+        super().set_model(model)
+        self.upgrade_model()
         return
     
     def upgrade_model(self) -> None:
@@ -55,7 +60,7 @@ class TextSummarizer:
         # Converts message in a dict form to message in a dialog (string) form
         return f"[{dct.get('role')}]: {dct.get('content')}"
         
-    def summarize(self, obj: Union[str, list, dict]) -> str:
+    def run(self, obj: Union[str, list, dict]) -> str:
         # Raw text for summariztaion
         if isinstance(obj, str):
             return self.summarize_str(obj)
@@ -71,19 +76,22 @@ class TextSummarizer:
         else:
             raise TypeError(f"Unsupported type {type(obj)} for argument 'obj'.",
                             f"Only str, dict and list are supported.")
-        
-    def summarize_str(self, string: str) -> str:
-        request = self.prompt + f"""
+
+    def wrap(self, string: str) -> str:
+        return self.prompt + f"""
             <TEXT>
             {string}
             """
-        n_tokens = self.token_counter.count(request)
+        
+    def summarize_str(self, string: str) -> str:
+        request = self.wrap(string)
+        n_tokens = self.token_counter.run(request)
         # If text is super long, split it in 2 parts
         if n_tokens > self._limits[self.model]:
             lines = request.split("\n")
             n_lines = len(lines)
             batch = "\n".join(lines[:n_lines//2])
-            n_tokens_batch = self.token_counter.count(batch)
+            n_tokens_batch = self.token_counter.run(batch)
             if n_tokens_batch > self._limits[self.model]:
                 # Probably, it's a very long single message.
                 # Summarize it in a bruteforce manner.
@@ -93,6 +101,16 @@ class TextSummarizer:
             return self.summarize_str(new_string)
         answer = self.gpt.get_str(request)
         return answer
+
+    def brute_summarize(self, string: str) -> str:
+        # Split large string with no newlines into two parts
+        # Summarize first one and add the result to second one
+        # Then summarize the mixed string
+        size = len(string)
+        batch = string[:size//2]
+        summary = self.summarize_str(batch)
+        new_string = summary + string[size//2:]
+        return self.summarize_str(new_string)
     
     def summarize_dict(self, dct: dict) -> str:
         # Convert message in a dict form to message in a dialog (string) form.

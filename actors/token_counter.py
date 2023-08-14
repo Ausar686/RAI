@@ -3,16 +3,30 @@ from collections import deque
 
 import tiktoken
 
+from .base_actor import BaseActor
 
-class TokenCounter:
-    _tokens_per_message = 3,
+
+class TokenCounter(BaseActor):
+    _tokens_per_message = 3
+    _models = [
+        "gpt-3.5-turbo",
+        "gpt-3.5-turbo-16k",
+        "gpt-4",
+        "gpt-4-32k",
+    ]
     
     def __init__(self, model: str="gpt-3.5-turbo"):
-        self.model = model
-        self.encoding = tiktoken.encoding_for_model(self.model)
+        super().__init__(model)
+        self.encodings = {key: tiktoken.encoding_for_model(key) for key in self._models}
         return
+
+    @property
+    def encoding(self):
+        return self.encodings[self.model]
     
-    def count(self, obj: Union[str, dict, list]) -> int:
+    def run(self, obj: Union[str, dict, list, None]) -> int:
+        if obj is None:
+            return 0
         if isinstance(obj, str):
             return self.count_from_str(obj)
         elif isinstance(obj, dict):
@@ -23,7 +37,7 @@ class TokenCounter:
             # Counting for list and deque are the same
             return self.count_from_list(obj)
         else:
-            raise TypeError(f"Parameter 'obj' must be str, dict, list or deque, not {type(obj)}.")
+            raise TypeError(f"Parameter 'obj' must be str, dict, list, deque, or None, not {type(obj)}.")
             
     def count_from_str(self, string: str) -> int:
         return len(self.encoding.encode(string))
@@ -38,7 +52,7 @@ class TokenCounter:
         # Here we assume that a list of messages in OpenAI dict form is given:
         # [{"role": role, "content": content}, ...]
         # So we simply iterate over the list and call 'count_from_dict'
-        n_tokens = 0
+        num_tokens = 0
         for message in lst:
             num_tokens += self._tokens_per_message
             num_tokens += self.count_from_dict(message)

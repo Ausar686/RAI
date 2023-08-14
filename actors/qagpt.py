@@ -5,8 +5,10 @@ import time
 
 import openai
 
+from .base_actor import BaseActor
 
-class QAGPT:
+
+class QAGPT(BaseActor):
     """
     Wrapping class around OpenAI API to simplify development and automatic usage.
     """
@@ -32,8 +34,8 @@ class QAGPT:
             stream (bool): Whether to provide a omplete answer at once (False), or token-by-token (True). Default: False.
             n (int): Number of answers to generate. NOTE: Each answer consumes tokens. Default: 1. 
         """
+        super().__init__(model)
         QAGPT.set_api_key(key)
-        self.model = model
         self.temperature = temperature
         if stream:
             raise NotImplementedError("Streaming option coming soon...")
@@ -282,6 +284,12 @@ class QAGPT:
             answer (Union[int, float, list, dict, str]): OpenAI API answer in a most desired format.
         """ 
         return getattr(self, f'get_{self.get_type(request)}')(request)
+
+    def run(self, request: str) -> str:
+        """
+        An alias for 'get_str' method for usage as an actor in ChatBot
+        """
+        return self.get_str(request)
 
     def __repr__(self):
         """

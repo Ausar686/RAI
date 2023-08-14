@@ -1,0 +1,19 @@
+[
+	{
+		"name": "summarizer",
+		"class": "TextSummarizer",
+		"sync_models": false,
+		"params": {
+			"model": "gpt-3.5-turbo",
+			"n_words": 50
+		}
+	},
+	{
+		"name": "token_counter",
+		"class": "TokenCounter",
+		"sync_models": true,
+		"params": {
+			"model": "gpt-3.5-turbo"
+		}
+	}
+]

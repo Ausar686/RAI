@@ -1,0 +1,22 @@
+{
+	"root": null,
+	"name": "RAIChatBot",
+	"openai": {
+		"model": "gpt-3.5-turbo",
+		"api_key": null,
+		"temperature": 0,
+		"stream": false,
+		"n": 1,
+		"time_sleep": 2,
+		"n_tokens": 4000
+	},
+	"instructions": {
+		"role": null,
+		"style": null,
+		"format": null,
+		"effectiveness": "Each token matters, so make your messages as short, as possible, yet incredibly accurate."
+	},
+	"actions": {
+
+	}
+}

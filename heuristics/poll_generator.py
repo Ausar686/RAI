@@ -1,7 +1,7 @@
 import json
 import re
 
-from ..bot.qagpt import QAGPT
+from ..actors.qagpt import QAGPT
 
 
 class PollGenerator:
