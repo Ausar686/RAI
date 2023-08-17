@@ -1,4 +1,5 @@
 from typing import Any, Union
+import hashlib
 import json
 import os
 
@@ -60,6 +61,8 @@ class ChatBot:
         })
     })
     
+    _runtime_modes_available = ["console", "app"]
+    
     # Errors initialization
     _api_key_error = """
         OpenAI API key must be provided in one of two ways.
@@ -75,14 +78,15 @@ class ChatBot:
     
     _n_answers_error = "Several answers option is not implemented yet."
     
-    _mode_error = "Wrong mode. Available modes are: 'console' and 'app'"
+    _mode_error = f"Wrong mode value. Available modes are: {_runtime_modes_available}"
         
     def __init__(
         self,
         config_path: str,
         actors_config_path: str=None,
-        mode: str="console",
+        functions_config_path: str=None,
         *,
+        mode: str="console",
         profile: Profile=None,
         log: bool=False) -> None:
         """
@@ -102,6 +106,8 @@ class ChatBot:
         self.set_openai_parameters()
         # Setup actors from config
         self.actors_from_config(actors_config_path)
+        # Setup usable functions from config.
+        self.functions_from_config(functions_config_path)
         # Initialize dialog attributes
         self.init_messages(profile)
         # Validate initialization
@@ -159,6 +165,7 @@ class ChatBot:
         Initializes ChatBot actors from .json configuration file.
         """
         if actors_config_path is None:
+            # Set only default actors
             self.set_default_actors()
             return
         with open(actors_config_path, "r", encoding="utf-8") as json_file:
@@ -172,6 +179,8 @@ class ChatBot:
             exec(f"self.actors[{name}] = {class_name}(**{kwargs})")
             if sync:
                 self._synced_actors.append(self.actors[name])
+        # Set default actors if they are not set yet.
+        self.set_default_actors()
         return
     
     @method_logger
@@ -179,8 +188,10 @@ class ChatBot:
         """
         Initializes default ChatBot actors.
         """
-        self.actors.token_counter = TokenCounter(self.openai.model)
-        self.actors.summarizer = TextSummarizer(self.actors.token_counter.model, self._defaults.text_summarizer.n_words)
+        if "token_counter" not in self.actors:
+            self.actors.token_counter = TokenCounter(self.openai.model)
+        if "summarizer" not in self.actors:
+            self.actors.summarizer = TextSummarizer(self.actors.token_counter.model, self._defaults.text_summarizer.n_words)
         self._synced_actors.append(self.actors.token_counter)
         return
     
@@ -212,6 +223,28 @@ class ChatBot:
         return
     
     @method_logger
+    def functions_from_config(self, functions_config_path: str=None) -> None:
+        """
+        Set functions list in JSON notation to use in OpenAI API calls.
+        """
+        if functions_config_path is None:
+            self.set_default_functions()
+            return
+        with open(functions_config_path, "r", encoding="utf-8") as json_file:
+            self.usable_functions = json.load(json_file)
+        self._usable_functions_names = [elem["name"] for elem in self.usable_functions]
+        return
+    
+    @method_logger
+    def set_default_functions(self) -> None:
+        """
+        Set default list of functions (None) to use in OpenAI API calls.
+        """
+        self.usable_functions = None
+        self._usable_functions_names = None
+        return
+    
+    @method_logger
     def set_instruction(self) -> None:
         """
         Sets bot instruction in a string representation as an attribute.
@@ -239,6 +272,7 @@ class ChatBot:
             self.username = self._defaults["chat"]["username"]
         else:
             self.username = profile.user_data.username
+        self.profile = profile
         if self.name is None:
             self.name = self._defaults["chat"]["bot_name"]
         self.set_system_message()
@@ -287,11 +321,11 @@ class ChatBot:
         msg = Message(msg_dct)
         return msg
     
-    def bot_message(self, text: str) -> Message:
+    def bot_message(self, text: Any) -> Message:
         """
         Converts text to Message with bot data.
         """
-        msg_dct = {"role": "assistant", "content": text, "username": self.name}
+        msg_dct = {"role": "assistant", "content": str(text), "username": self.name}
         msg = Message(msg_dct)
         return msg
     
@@ -342,6 +376,26 @@ class ChatBot:
         for actor in self._synced_actors:
             actor.set_model(self.openai.model)
         return
+
+    def __len__(self) -> int:
+        """
+        Returns the current size of the bot context in tokens.
+        """
+        return self.actors.token_counter.run(self.context)
+
+    @property
+    def last_message_len(self) -> int:
+        """
+        Returns the current size of the last message in tokens
+        """
+        return self.actors.token_counter.run(self.last_message)
+
+    @property
+    def size_limit(self) -> int:
+        """
+        Returns available token size limit for context for self.openai.model
+        """
+        return self._defaults.limits[self.openai.model]
     
     def verify_context(self) -> None:
         """
@@ -350,9 +404,9 @@ class ChatBot:
         Updated context contains system message, summary and last message.
         Chat data is not affected by this method.
         """
-        if self.actors.token_counter.run(self.context) > self._defaults.limits[self.openai.model]:
+        if len(self) > self.size_limit:
             # Check for huge prompt injection
-            if self.actors.token_counter.run(self.last_message) > self._defaults.limits[self.openai.model]:
+            if self.last_message_len > self.size_limit:
                 try:
                     self.upgrade_model()
                 except KeyError:
@@ -398,7 +452,7 @@ class ChatBot:
     @retry(5)
     async def aget_completion(self) -> OpenAIObject:
         """
-        Sends context to OpenAI API and receives response from it as a completion.
+        (ASYNC) Sends context to OpenAI API and receives response from it as a completion.
         """
         completion = await openai.ChatCompletion.acreate(
             messages=self.context,
@@ -409,38 +463,169 @@ class ChatBot:
         )
         return completion
     
+    @retry(5)
+    def fget_completion(self) -> OpenAIObject:
+        """
+        Sends context to OpenAI API and receives response from it as a completion.
+        Response CAN contain a function call from self.usable_functions.
+        """
+        if self.usable_functions is None:
+            return self.get_completion()
+        completion = openai.ChatCompletion.create(
+            messages=self.context,
+            model=self.openai.model,
+            temperature=self.openai.temperature,
+            stream=self.openai.stream,
+            n=self.openai.n,
+            functions=self.usable_functions
+        )
+        return completion
+    
+    @retry(5)
+    async def afget_completion(self) -> OpenAIObject:
+        """
+        (ASYNC) Sends context to OpenAI API and receives response from it as a completion.
+        Response CAN contain a function call from self.usable_functions.
+        """
+        if self.usable_functions is None:
+            return await self.aget_completion()
+        completion = await openai.ChatCompletion.acreate(
+            messages=self.context,
+            model=self.openai.model,
+            temperature=self.openai.temperature,
+            stream=self.openai.stream,
+            n=self.openai.n,
+            functions=self.usable_functions
+        )
+        return completion
+    
     @staticmethod
     def completion_to_openai_message_list(completion: OpenAIObject) -> list:
+        """
+        Converts OpenAI Completion (OpenAIObject) to a list of choices.
+        """
         lst = [choice.message for choice in completion.choices]
         return lst
     
     @staticmethod
-    def openai_message_list_to_dict(lst: list) -> dict:
+    def openai_message_list_to_dict(lst: list) -> OpenAIObject:
         """
-        Converts list of messages
+        Converts list of messages to an OpenAIObject:
+        {"role": role, "content": content}
         """
         # [TODO]: Add proper processing of several generated variants
         return lst[0]
+    
+    def call_from_completion(self, completion: OpenAIObject) -> Any:
+        """
+        Calls function from OpenAI Completion.
+        Raises ValueError if function is not presented in self.usable_functions
+        """
+        # [TODO]: Add processing of multiple choices.
+        message = completion.choices[0].message
+        call_data = message.function_call
+        func_name = call_data.name
+        if func_name not in self._usable_functions_names:
+            raise ValueError(f"Function {func_name} is not available to call.")
+        arg_string = call_data.arguments
+        kwargs = json.loads(arg_string)
+        content = eval(f"self.{func_name}(**{kwargs})")
+        msg = self.bot_message(content)
+        return msg
+    
+    async def acall_from_completion(self, completion: OpenAIObject) -> Any:
+        """
+        (ASYNC) Calls function from OpenAI Completion.
+        Raises ValueError if function is not presented in self.usable_functions
+        """
+        # [TODO]: Add processing of multiple choices.
+        message = completion.choices[0].message
+        call_data = message.function_call
+        func_name = call_data.name
+        if func_name not in self._usable_functions_names:
+            raise ValueError(f"Function {func_name} is not available to call.")
+        arg_string = call_data.arguments
+        kwargs = json.loads(arg_string)
+        content = eval(f"await self.{func_name}(**{kwargs})")
+        msg = self.bot_message(content)
+        return msg
+    
+    def completion_to_message(self, completion: OpenAIObject) -> Message:
+        """
+        Converts OpenAI Completion into a Message
+        """
+        msg_lst = self.completion_to_openai_message_list(completion)
+        msg_dct = self.openai_message_list_to_dict(msg_lst)
+        msg = Message(msg_dct)
+        return msg
+    
+    def process_completion(self, completion: OpenAIObject) -> Any:
+        """
+        Processes the completion.
+        If function call is required, calls it and returns the result.
+        """
+        # [TODO]: Add processing of multiple choices.
+        finish_reason = completion.choices[0].finish_reason
+        if finish_reason == "stop":
+            return self.completion_to_message(completion)
+        elif finish_reason == "function_call":
+            return self.call_from_completion(completion)
+        else:
+            raise ValueError(f"Invalid value of 'finish_reason': {finish_reason}")
+            
+    async def aprocess_completion(self, completion: OpenAIObject) -> Any:
+        """
+        (ASYNC) Processes the completion.
+        If function call is required, calls it and returns the result.
+        """
+        # [TODO]: Add processing of multiple choices.
+        finish_reason = completion.choices[0].finish_reason
+        if finish_reason == "stop":
+            return self.completion_to_message(completion)
+        elif finish_reason == "function_call":
+            return await self.acall_from_completion(completion)
+        else:
+            raise ValueError(f"Invalid value of 'finish_reason': {finish_reason}")
     
     def get_answer(self) -> Message:
         """
         Full pipeline of answer obtaining from OpenAI API.
         """
         completion = self.get_completion()
-        message_list = self.completion_to_openai_message_list(completion)
-        msg_dct = self.openai_message_list_to_dict(message_list)
-        msg = Message(msg_dct)
+        msg = self.process_completion(completion) 
         return msg
     
     async def aget_answer(self) -> Message:
         """
-        Full pipeline of answer obtaining from OpenAI API.
+        (ASYNC) Full pipeline of answer obtaining from OpenAI API.
         """
         completion = await self.aget_completion()
-        message_list = self.completion_to_openai_message_list(completion)
-        msg_dct = self.openai_message_list_to_dict(message_list)
-        msg = Message(msg_dct)
+        msg = await self.aprocess_completion(completion) 
         return msg
+
+    def fget_answer(self) -> Message:
+        """
+        Full pipeline of answer obtaining from OpenAI API.
+        """
+        # [TODO]: Add proper exception handling
+        try:
+            completion = self.fget_completion()
+            msg = self.process_completion(completion)
+            return msg
+        except Exception:
+            return self.get_answer()
+    
+    async def afget_answer(self) -> Message:
+        """
+        (ASYNC) Full pipeline of answer obtaining from OpenAI API.
+        """
+        # [TODO]: Add proper exception handling
+        try:
+            completion = await self.afget_completion()
+            msg = await self.aprocess_completion(completion) 
+            return msg
+        except Exception:
+            return await self.aget_answer()
     
     def display(self) -> None:
         """
@@ -474,14 +659,67 @@ class ChatBot:
         Main method. Executes dialogue with chat-bot.
         Currently only console mode is implemented.
         """
+        if self.usable_functions is not None:
+            return self.frun()
         if self._runtime_mode == "app":
-            return
+            return self.run_in_app_mode()
+        elif self._runtime_mode == "console":
+            return self.run_in_console_mode()
+        else:
+            raise ValueError(self._mode_error)
+            
+    def frun(self):
+        """
+        Main method. Executes dialogue with chat-bot.
+        Currently only console mode is implemented.
+        Function calls are enabled in this method 
+        (instead of 'run', in which they are disabled)
+        """
+        if self._runtime_mode == "app":
+            return self.frun_in_app_mode()
+        elif self._runtime_mode == "console":
+            return self.frun_in_console_mode()
+        else:
+            raise ValueError(self._mode_error)
+    
+    def run_in_app_mode(self) -> None:
+        """
+        Runs bot in mobile application mode.
+        """
+        pass
+    
+    def run_in_console_mode(self) -> None:
+        """
+        Runs bot in console mode.
+        """
         while not self.is_over:
             msg = self.get_answer()
             self.append(msg)
             self.display()
             self.process_input()
             self.verify_context()
+        else:
+            self.end_conversation()
+        return
+    
+    def frun_in_app_mode(self) -> None:
+        """
+        Runs bot in mobile application mode.
+        """
+        pass
+    
+    def frun_in_console_mode(self) -> None:
+        """
+        Runs bot in console mode.
+        """
+        while not self.is_over:
+            msg = self.fget_answer()
+            self.append(msg)
+            self.display()
+            self.process_input()
+            self.verify_context()
+        else:
+            self.end_conversation()
         return
         
     @property    
@@ -490,6 +728,21 @@ class ChatBot:
         A property, that represents, whether the dialogue is ended by user.
         """
         return not bool(self.last_message.content)
+
+    def end_conversation(self) -> None:
+        content = "Был рад помочь!"
+        msg = self.bot_message(content)
+        self.append(msg)
+        self.display()
+        self.verify_context()
+        self.chat.to_disk()
+        return
+
+    def hash_button_option(self, option: str) -> str:
+        prefix = f"{self.username}~~~{self.name}"
+        hashed_prefix = hashlib.sha256(str.encode(prefix)).hexdigest
+        hashed_string = f"{hashed_prefix}\n{option}"
+        return hashed_string
     
     def __getattr__(self, attr: str) -> Any:
         """

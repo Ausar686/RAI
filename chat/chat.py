@@ -141,14 +141,14 @@ class Chat:
     
     def to_disk(self) -> None:
         output_dir = self._data_dir
-        if not os.path.exists(output_dir):
-            raise ValueError("Directory does not exist.")
+        # if not os.path.exists(output_dir):
+            # raise ValueError("Directory does not exist.")
         output_user_dir = os.path.join(output_dir, self.username)
-        if not os.path.exists(output_user_dir):
-            os.mkdir(output_user_dir)
+        # if not os.path.exists(output_user_dir):
+        #     os.mkdir(output_user_dir)
         output_bot_dir = os.path.join(output_user_dir, self.bot_name)
         if not os.path.exists(output_bot_dir):
-            os.mkdir(output_bot_dir)
+            os.makedirs(output_bot_dir)
         splitted_messages = []
         for i in range(0, len(self), self._chunk_size):
             chunk = [message.to_dict() for message in self.messages[i: i+self._chunk_size]]

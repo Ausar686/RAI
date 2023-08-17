@@ -4,6 +4,7 @@ from collections import deque
 import tiktoken
 
 from .base_actor import BaseActor
+from ..chat import Message
 
 
 class TokenCounter(BaseActor):
@@ -36,8 +37,11 @@ class TokenCounter(BaseActor):
         elif isinstance(obj, deque):
             # Counting for list and deque are the same
             return self.count_from_list(obj)
+        elif isinstance(obj, Message):
+            # Counting for Message is equal to counting from dict
+            return self.count_from_dict(obj.to_openai())
         else:
-            raise TypeError(f"Parameter 'obj' must be str, dict, list, deque, or None, not {type(obj)}.")
+            raise TypeError(f"Parameter 'obj' must be str, dict, list, deque, Message or None, not {type(obj)}.")
             
     def count_from_str(self, string: str) -> int:
         return len(self.encoding.encode(string))

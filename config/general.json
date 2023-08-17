@@ -14,7 +14,8 @@
 		"role": null,
 		"style": null,
 		"format": null,
-		"effectiveness": "Each token matters, so make your messages as short, as possible, yet incredibly accurate."
+		"effectiveness": "Each token matters, so make your messages as short, as possible, yet incredibly accurate.",
+		"functions": "Call provided functions whenever possible and necessary."
 	},
 	"actions": {
 
