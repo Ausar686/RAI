@@ -1,3 +1,6 @@
+# Created by: Ausar686
+# https://github.com/Ausar686
+
 import os
 from collections import defaultdict
 

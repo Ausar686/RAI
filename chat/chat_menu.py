@@ -1,3 +1,6 @@
+# Created by: Ausar686
+# https://github.com/Ausar686
+
 from typing import Iterable, List
 from collections import deque
 

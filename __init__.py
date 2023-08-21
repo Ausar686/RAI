@@ -1,3 +1,6 @@
+# Created by: Ausar686
+# https://github.com/Ausar686
+
 from .actors import ChatBot, KnowledgeBaseSearcher, TextSummarizer, TokenCounter, QAGPT
 from .chat import Chat, ChatMenu, Message
 from .containers import RDict

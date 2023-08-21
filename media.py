@@ -1,3 +1,6 @@
+# Created by: Ausar686
+# https://github.com/Ausar686
+
 class BaseMedia:
     """
     Base class for media files (i.e. audio/video).

@@ -1,3 +1,6 @@
+# Created by: Ausar686
+# https://github.com/Ausar686
+
 class BaseActor:
 	"""
 	Base class for all RAI actors, which can be used in ChatBot

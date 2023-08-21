@@ -1,3 +1,6 @@
+# Created by: Ausar686
+# https://github.com/Ausar686
+
 from typing import Any, Union
 import hashlib
 import json
@@ -249,7 +252,7 @@ class ChatBot:
         """
         Sets bot instruction in a string representation as an attribute.
         """
-        self.instruction = "<INSTRUCTIONS>\n" + "\n".join([f"{key}: {value}" for key, value in self.instructions.items()])
+        self.instruction = "###INSTRUCTIONS###\n" + "\n\n".join([f"<{key}>: {value}" for key, value in self.instructions.items()])
         return
     
     @method_logger
@@ -626,15 +629,31 @@ class ChatBot:
             return msg
         except Exception:
             return await self.aget_answer()
+
+    @property
+    def last_message_fstring(self) -> str:
+        """
+        Returns last message as a formatted string.
+        """
+        return f"[{self.last_message.username}]: {self.last_message.content}"
     
     def display(self) -> None:
         """
         Displays last message as a formatted string.
         """
-        print(f"[{self.last_message.username}]: {self.last_message.content}")
+        print(self.last_message_fstring)
+        return
+
+    def process_output(self) -> None:
+        """
+        Full pipeline of OpenAI output processing.
+        """
+        msg = self.get_answer()
+        self.append(msg)
+        self.display() 
         return
     
-    def input(self) -> None:
+    def input(self) -> Message:
         """
         User input option for console mode.
         """
@@ -650,9 +669,12 @@ class ChatBot:
         """
         if self._runtime_mode == "app":
             return
-        msg = self.input()
-        self.append(msg)
-        return
+        elif self._runtime_mode == "console":
+            msg = self.input()
+            self.append(msg)
+            return
+        else:
+            raise ValueError(self._mode_error)
     
     def run(self) -> None:
         """
@@ -693,9 +715,7 @@ class ChatBot:
         Runs bot in console mode.
         """
         while not self.is_over:
-            msg = self.get_answer()
-            self.append(msg)
-            self.display()
+            self.process_output()
             self.process_input()
             self.verify_context()
         else:
@@ -743,6 +763,21 @@ class ChatBot:
         hashed_prefix = hashlib.sha256(str.encode(prefix)).hexdigest
         hashed_string = f"{hashed_prefix}\n{option}"
         return hashed_string
+
+    def to_txt(self, path: str) -> None:
+        """
+        Writes chat in .txt file in the format below.
+        Example:
+            [Bot]: How can I assist you?
+            [User]: I want to become rich.
+            [Bot]: ...
+            ..........
+        """
+        msg_lst =  [f"{msg.username}: {msg.content}" for msg in self.messages[1:]]
+        text = "\n".join(msg_lst)
+        with open(path, "w", encoding="utf-8") as file:
+            file.write(text)
+        return
     
     def __getattr__(self, attr: str) -> Any:
         """

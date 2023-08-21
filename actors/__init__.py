@@ -1,3 +1,6 @@
+# Created by: Ausar686
+# https://github.com/Ausar686
+
 from .chat_bot import ChatBot
 from .knowledge_base_searcher import KnowledgeBaseSearcher
 from .qagpt import QAGPT

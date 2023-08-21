@@ -7,15 +7,16 @@
 		"temperature": 0,
 		"stream": false,
 		"n": 1,
-		"time_sleep": 2,
-		"n_tokens": 4000
+		"time_sleep": 2
 	},
 	"instructions": {
 		"role": null,
 		"style": null,
 		"format": null,
-		"effectiveness": "Each token matters, so make your messages as short, as possible, yet incredibly accurate.",
-		"functions": "Call provided functions whenever possible and necessary."
+		"audience": null,
+		"language": null,
+		"effectiveness": "Each token matters, so make your messages precise and concise.",
+		"functions": null
 	},
 	"actions": {
 

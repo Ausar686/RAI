@@ -1,3 +1,6 @@
+# Created by: Ausar686
+# https://github.com/Ausar686
+
 from .base_actor import BaseActor
 from .qagpt import QAGPT
 from ..api_pmc_requests import PMCRequester

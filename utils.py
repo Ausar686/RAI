@@ -1,3 +1,6 @@
+# Created by: Ausar686
+# https://github.com/Ausar686
+
 def method_logger(func):
     """
     Special decorator for logging RAI ChatBot methods.
