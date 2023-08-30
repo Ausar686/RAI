@@ -49,12 +49,12 @@ def retry(n_retries: int=5):
     def decorator(func):
         def wrapper(*args, **kwargs):
             n = n_retries
-            while n >= 0:
+            while True:
                 try:
                     return func(*args, **kwargs)
-                except Exception:
+                except Exception as e:
                     n -= 1
-            else:
-                raise ValueError("Amount of retries exceeded. Abort.")
+                    if n <= 0:
+                        raise
         return wrapper
     return decorator

@@ -22,7 +22,7 @@ class QAGPT(BaseActor):
     def __init__(
         self, 
         model: str='gpt-3.5-turbo', 
-        key: str=os.getenv("OPENAI_API_KEY"),
+        key: str=None,
         temperature: float=0,
         stream: bool=False,
         n: int=1,
@@ -31,14 +31,14 @@ class QAGPT(BaseActor):
         Initializes QAGPT(Qusetion-Answer GPT) object instance.
         Args:
             model (str): Type of model for API to use. Default: 'gpt-3.5-turbo'
-            key (str): OpenAI API key. By default it's supposed, that you store it inside of 'OPENAI_API_KEY' environment variable.
+            key (str): OpenAI API key. By default it's supposed, that you store it inside of 'OPENAI_API_KEY' environment variable. Default: None.
             temperature (float): Randomness of the results. The higher the value is, the more creative answers you will get.
                                  Lower values, yet, provide conservative answers. Should be in interval [0,2]. Default: 0.
             stream (bool): Whether to provide a omplete answer at once (False), or token-by-token (True). Default: False.
             n (int): Number of answers to generate. NOTE: Each answer consumes tokens. Default: 1. 
         """
         super().__init__(model)
-        QAGPT.set_api_key(key)
+        self.set_api_key(key)
         self.temperature = temperature
         if stream:
             raise NotImplementedError("Streaming option coming soon...")
@@ -62,18 +62,17 @@ class QAGPT(BaseActor):
     def set_api_key(key: str) -> None:
         """
         Static method, that sets openai.api_key value.
+        The API key is set only if it was None before calling the method. 
         Args:
-            key (str): Value, that should be set as openai.api_key
+            key (str): Value, that should be set as openai.api_key. If key is None gets an environmental variable 'OPENAI_API_KEY'
         Returns:
             None
         """
-        try:
+        if openai.api_key is None:
+            if key is None:
+                key = os.getenv("OPENAI_API_KEY")
             openai.api_key = key
-        except Exception as e:
-            print("[ERROR]: Unable to set OpenAI API key. By default, it is supposed to be stored in your environmental variable 'OPENAI_API_KEY'. Please, check it out.")
-            print("[ERROR]: If you had explicitly set a value of your OpenAI API key in the code, please, check, that it is correct.")
-            print("[ERROR]: If nothing seems to work, try to make a new OpenAI API key on official website in your account.")
-            raise e
+        return
         
     def form_message(self, request: str, role: str="user") -> dict:
         """

@@ -13,9 +13,7 @@
 		"role": null,
 		"style": null,
 		"format": null,
-		"audience": null,
 		"language": null,
-		"effectiveness": "Each token matters, so make your messages precise and concise.",
 		"functions": null
 	},
 	"actions": {

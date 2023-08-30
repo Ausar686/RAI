@@ -1,0 +1,7 @@
+numpy
+openai
+orjson
+pandas
+pydantic
+requests
+tiktoken

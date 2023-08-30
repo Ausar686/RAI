@@ -5,6 +5,7 @@ from typing import Any, Union
 import hashlib
 import json
 import os
+import re
 
 import openai
 from openai.openai_object import OpenAIObject
@@ -105,7 +106,7 @@ class ChatBot:
         self._runtime_mode = mode
         # Load config options from '.json' config file
         self.from_config(config_path)
-        # Set OpenAI API key
+        # Set OpenAI API parameters
         self.set_openai_parameters()
         # Setup actors from config
         self.actors_from_config(actors_config_path)
@@ -208,19 +209,21 @@ class ChatBot:
         if self.openai.api_key is None:
             raise ValueError(self._api_key_error)
         openai.api_key = self.openai.api_key
+        # Set environmental variable to prevent overriding by further imports
+        os.environ["OPENAI_API_KEY"] = self.openai.api_key
         return
     
     @method_logger
     def set_openai_parameters(self) -> None:
         """
-        Sets all required OpenAI API parameters (including API key).
+        Sets all required OpenAI API parameters (excluding API key).
         """
         if not hasattr(self, "openai"):
             raise ValueError("OpenAI section is not present in configuration files.")
         for key, value in self._defaults.openai.items():
             if key == "api_key":
                 self.set_api_key()
-                return
+                continue
             if key not in self.openai:
                 self.openai[key] = value
         return
@@ -518,6 +521,14 @@ class ChatBot:
         """
         # [TODO]: Add proper processing of several generated variants
         return lst[0]
+
+    @staticmethod
+    def remove_numeration(text: str) -> str:
+        """
+        Removes numeration from the text, thus converting numerated lists into plain text.
+        """
+        re_text = re.sub(r"(\n+?)\d+\.\s*(.*?)(\n+?)", r"\n\2", text)
+        return re_text
     
     def call_from_completion(self, completion: OpenAIObject) -> Any:
         """
@@ -559,6 +570,7 @@ class ChatBot:
         """
         msg_lst = self.completion_to_openai_message_list(completion)
         msg_dct = self.openai_message_list_to_dict(msg_lst)
+        msg_dct["content"] = self.remove_numeration(msg_dct["content"])
         msg = Message(msg_dct)
         return msg
     
@@ -636,133 +648,13 @@ class ChatBot:
         Returns last message as a formatted string.
         """
         return f"[{self.last_message.username}]: {self.last_message.content}"
-    
-    def display(self) -> None:
-        """
-        Displays last message as a formatted string.
-        """
-        print(self.last_message_fstring)
-        return
 
-    def process_output(self) -> None:
-        """
-        Full pipeline of OpenAI output processing.
-        """
-        msg = self.get_answer()
-        self.append(msg)
-        self.display() 
-        return
-    
-    def input(self) -> Message:
-        """
-        User input option for console mode.
-        """
-        if self._runtime_mode == "app":
-            return
-        content = input(f"[{self.username}]: ")
-        msg = self.user_message(content)
-        return msg
-    
-    def process_input(self) -> None:
-        """
-        User input processing method for both app and console modes.
-        """
-        if self._runtime_mode == "app":
-            return
-        elif self._runtime_mode == "console":
-            msg = self.input()
-            self.append(msg)
-            return
-        else:
-            raise ValueError(self._mode_error)
-    
-    def run(self) -> None:
-        """
-        Main method. Executes dialogue with chat-bot.
-        Currently only console mode is implemented.
-        """
-        if self.usable_functions is not None:
-            return self.frun()
-        if self._runtime_mode == "app":
-            return self.run_in_app_mode()
-        elif self._runtime_mode == "console":
-            return self.run_in_console_mode()
-        else:
-            raise ValueError(self._mode_error)
-            
-    def frun(self):
-        """
-        Main method. Executes dialogue with chat-bot.
-        Currently only console mode is implemented.
-        Function calls are enabled in this method 
-        (instead of 'run', in which they are disabled)
-        """
-        if self._runtime_mode == "app":
-            return self.frun_in_app_mode()
-        elif self._runtime_mode == "console":
-            return self.frun_in_console_mode()
-        else:
-            raise ValueError(self._mode_error)
-    
-    def run_in_app_mode(self) -> None:
-        """
-        Runs bot in mobile application mode.
-        """
-        pass
-    
-    def run_in_console_mode(self) -> None:
-        """
-        Runs bot in console mode.
-        """
-        while not self.is_over:
-            self.process_output()
-            self.process_input()
-            self.verify_context()
-        else:
-            self.end_conversation()
-        return
-    
-    def frun_in_app_mode(self) -> None:
-        """
-        Runs bot in mobile application mode.
-        """
-        pass
-    
-    def frun_in_console_mode(self) -> None:
-        """
-        Runs bot in console mode.
-        """
-        while not self.is_over:
-            msg = self.fget_answer()
-            self.append(msg)
-            self.display()
-            self.process_input()
-            self.verify_context()
-        else:
-            self.end_conversation()
-        return
-        
     @property    
     def is_over(self) -> bool:
         """
         A property, that represents, whether the dialogue is ended by user.
         """
         return not bool(self.last_message.content)
-
-    def end_conversation(self) -> None:
-        content = "Был рад помочь!"
-        msg = self.bot_message(content)
-        self.append(msg)
-        self.display()
-        self.verify_context()
-        self.chat.to_disk()
-        return
-
-    def hash_button_option(self, option: str) -> str:
-        prefix = f"{self.username}~~~{self.name}"
-        hashed_prefix = hashlib.sha256(str.encode(prefix)).hexdigest
-        hashed_string = f"{hashed_prefix}\n{option}"
-        return hashed_string
 
     def to_txt(self, path: str) -> None:
         """
@@ -778,6 +670,15 @@ class ChatBot:
         with open(path, "w", encoding="utf-8") as file:
             file.write(text)
         return
+
+    def clear(self) -> None:
+        """
+        Cleans the context for bot reusing
+        NOTE: This method does NOT clean the entire chat (self.chat)
+        """
+        self.context.clear()
+        self.context.append(self.system_message.to_openai())
+        return
     
     def __getattr__(self, attr: str) -> Any:
         """
@@ -787,3 +688,141 @@ class ChatBot:
         if attr in self.parameters:
             return self.parameters.get(attr)
         raise AttributeError(f"Attribute {attr} does not exist.")
+
+    # Here are some beta-feature methods, which will be useful in future updates.
+
+    def hash_button_option(self, option: str) -> str:
+        prefix = f"{self.username}~~~{self.name}"
+        hashed_prefix = hashlib.sha256(str.encode(prefix)).hexdigest
+        hashed_string = f"{hashed_prefix}\n{option}"
+        return hashed_string
+
+    # Here are some methods that can be usefully overridden in subclasses.
+    # It is strongly recommended not to override the methods above this line (excluding __init__)
+    
+    def display(self, *args, **kwargs) -> None:
+        """
+        Displays last message as a formatted string.
+        """
+        print(self.last_message_fstring)
+        return
+
+    def process_output(self, *args, **kwargs) -> None:
+        """
+        Full pipeline of OpenAI output processing.
+        """
+        msg = self.get_answer()
+        self.append(msg)
+        self.display(*args, **kwargs) 
+        return
+
+    def fprocess_output(self, *args, **kwargs) -> None:
+        """
+        Full pipeline of OpenAI output processing.
+        """
+        msg = self.fget_answer()
+        self.append(msg)
+        self.display(*args, **kwargs) 
+        return
+    
+    def input(self, *args, **kwargs) -> Message:
+        """
+        User input option for console mode.
+        """
+        if self._runtime_mode == "app":
+            return
+        content = input(f"[{self.username}]: ")
+        msg = self.user_message(content)
+        return msg
+    
+    def process_input(self, *args, **kwargs) -> None:
+        """
+        User input processing method for both app and console modes.
+        """
+        if self._runtime_mode == "app":
+            return
+        elif self._runtime_mode == "console":
+            msg = self.input(*args, **kwargs)
+            self.append(msg)
+            return
+        else:
+            raise ValueError(self._mode_error)
+
+    def fprocess_input(self, *args, **kwargs) -> None:
+        """
+        An alias for 'process_input' method to run with functions.
+        """
+        return self.process_input(*args, **kwargs)
+    
+    def run(self, *args, **kwargs) -> None:
+        """
+        Main method. Executes dialogue with chat-bot.
+        Currently only console mode is implemented.
+        """
+        if self.usable_functions is not None:
+            return self.frun(*args, **kwargs)
+        if self._runtime_mode == "app":
+            return self.run_in_app_mode(*args, **kwargs)
+        elif self._runtime_mode == "console":
+            return self.run_in_console_mode(*args, **kwargs)
+        else:
+            raise ValueError(self._mode_error)
+            
+    def frun(self, *args, **kwargs):
+        """
+        Main method. Executes dialogue with chat-bot.
+        Currently only console mode is implemented.
+        Function calls are enabled in this method 
+        (instead of 'run', in which they are disabled)
+        """
+        if self._runtime_mode == "app":
+            return self.frun_in_app_mode(*args, **kwargs)
+        elif self._runtime_mode == "console":
+            return self.frun_in_console_mode(*args, **kwargs)
+        else:
+            raise ValueError(self._mode_error)
+    
+    def run_in_app_mode(self, *args, **kwargs) -> None:
+        """
+        Runs bot in mobile application mode.
+        """
+        pass
+    
+    def run_in_console_mode(self, *args, **kwargs) -> None:
+        """
+        Runs bot in console mode.
+        """
+        while not self.is_over:
+            self.process_output(*args, **kwargs)
+            self.process_input(*args, **kwargs)
+            self.verify_context()
+        else:
+            self.end_conversation(*args, **kwargs)
+        return
+    
+    def frun_in_app_mode(self, *args, **kwargs) -> None:
+        """
+        Runs bot in mobile application mode.
+        """
+        pass
+    
+    def frun_in_console_mode(self, *args, **kwargs) -> None:
+        """
+        Runs bot in console mode.
+        """
+        while not self.is_over:
+            self.fprocess_output(*args, **kwargs)
+            self.fprocess_input(*args, **kwargs)
+            self.verify_context()
+        else:
+            self.end_conversation(*args, **kwargs)
+        return
+
+    def end_conversation(self, *args, **kwargs) -> None:
+        content = "Был рад помочь!"
+        msg = self.bot_message(content)
+        self.append(msg)
+        self.display(*args, **kwargs)
+        self.verify_context()
+        self.chat.to_disk()
+        return
