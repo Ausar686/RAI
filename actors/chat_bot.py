@@ -527,7 +527,7 @@ class ChatBot:
         """
         Removes numeration from the text, thus converting numerated lists into plain text.
         """
-        re_text = re.sub(r"(\n+?)\d+\.\s*(.*?)(\n+?)", r"\n\2", text)
+        re_text = re.sub(r"(\n+?)\d+\.\s*(.*?)", r"\n\2", text)
         return re_text
     
     def call_from_completion(self, completion: OpenAIObject) -> Any:

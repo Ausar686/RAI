@@ -5,3 +5,5 @@ pandas
 pydantic
 requests
 tiktoken
+notebook==6.*
+jupyterlab
