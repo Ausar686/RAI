@@ -33,10 +33,10 @@ class ChatBot:
             "time_sleep": 2,
         }),
         "limits": RDict(None, {
-            "gpt-3.5-turbo": 3500,
-            "gpt-3.5-turbo-16k": 15500,
-            "gpt-4": 7500,
-            "gpt-4-32k": 31500
+            "gpt-3.5-turbo": 3000,
+            "gpt-3.5-turbo-16k": 15000,
+            "gpt-4": 7000,
+            "gpt-4-32k": 31000
         }),
         "upgrades": RDict(None, {
             "gpt-3.5-turbo": "gpt-3.5-turbo-16k",
@@ -92,6 +92,7 @@ class ChatBot:
         *,
         mode: str="console",
         profile: Profile=None,
+        chat: Chat=None,
         log: bool=False) -> None:
         """
         Initializes ChatBot instance using 2 config files.
@@ -175,16 +176,24 @@ class ChatBot:
         with open(actors_config_path, "r", encoding="utf-8") as json_file:
             actors_json = json.load(json_file)
         for actor in actors_json:
-            name = actor.get("name")
-            class_name = actor.get("class")
-            kwargs = actor.get("params")
-            sync = actor.get("sync_models")
-            exec(f"from RAI import {class_name}")
-            exec(f"self.actors[{name}] = {class_name}(**{kwargs})")
-            if sync:
-                self._synced_actors.append(self.actors[name])
+            self.set_actor(actor)
         # Set default actors if they are not set yet.
         self.set_default_actors()
+        return
+
+    @method_logger
+    def set_actor(self, actor: dict) -> None:
+        """
+        Sets an actor to bot, using data in dictionary, obtained from .json file.
+        """
+        name = actor.get("name")
+        class_name = actor.get("class")
+        kwargs = actor.get("params")
+        sync = actor.get("sync_models")
+        exec(f"from RAI import {class_name}")
+        exec(f"self.actors[{name}] = {class_name}(**{kwargs})")
+        if sync:
+            self._synced_actors.append(self.actors[name])
         return
     
     @method_logger
@@ -268,7 +277,7 @@ class ChatBot:
         return
     
     @method_logger
-    def init_messages(self, profile: Profile) -> None:
+    def init_messages(self, profile: Profile, chat: Chat) -> None:
         """
         Initializes dialog attributes.
         'chat' is an internal message storage (will NOT be sent to API).
@@ -282,8 +291,11 @@ class ChatBot:
         if self.name is None:
             self.name = self._defaults["chat"]["bot_name"]
         self.set_system_message()
-        chat_dct = {"username": self.username, "bot_name": self.name, "messages": [self.system_message]}
-        self.chat = Chat(chat_dct)
+        if chat is None:
+            chat_dct = {"username": self.username, "bot_name": self.name, "messages": [self.system_message]}
+            self.chat = Chat(chat_dct)
+        else:
+            self.chat = chat
         self.context = [self.system_message.to_openai()]
         return
     
@@ -296,6 +308,7 @@ class ChatBot:
             raise NotImplementedError(self._n_answers_error)
         if self._runtime_mode not in ["console", "app"]:
             raise NotmplementedError(self._mode_error)
+        return
 
     @property
     def messages(self) -> list:
@@ -419,15 +432,25 @@ class ChatBot:
                     self.fix_injection()
                 self.verify_context()
                 return
-            summary = self.actors.summarizer.run(self.context[1:-1])
-            msg = self.sys_message(summary)
-            msg_list = [self.system_message, msg, self.last_message]
-            self.context = [elem.to_openai() for elem in msg_list]
             try:
-                self.downgrade_model()
+                self.upgrade_model()
             except KeyError:
-                pass
-            return
+                self.summarize_context()
+            self.verify_context()
+        return
+
+    def summarize_context(self) -> None:
+        """
+        Performs context summarization. By default, is used once context length reaches the limit.
+        """
+        summary = self.actors.summarizer.run(self.context[1:-1])
+        msg = self.sys_message(summary)
+        msg_list = [self.system_message, msg, self.last_message]
+        self.context = [elem.to_openai() for elem in msg_list]
+        try:
+            self.downgrade_model()
+        except KeyError:
+            pass
         return
     
     def fix_injection(self) -> None:
@@ -693,7 +716,7 @@ class ChatBot:
 
     def hash_button_option(self, option: str) -> str:
         prefix = f"{self.username}~~~{self.name}"
-        hashed_prefix = hashlib.sha256(str.encode(prefix)).hexdigest
+        hashed_prefix = hashlib.sha256(str.encode(prefix)).hexdigest()
         hashed_string = f"{hashed_prefix}\n{option}"
         return hashed_string
 

@@ -15,15 +15,15 @@ class Profile:
     _actions_filename = "actions.csv"
     _media_data_filename = "media.csv"
     
-    def __init__(self,
-                 load_dir: str=None,
-                 *,
-                 user_data: UserData=None,
-                 diary: Diary=None,
-                 actions: Actions=None,
-                 media: MediaStorage=None,
-                 default_dir: str=None
-                ):
+    def __init__(
+        self,
+        load_dir: str=None,
+        *,
+        user_data: UserData=None,
+        diary: Diary=None,
+        actions: Actions=None,
+        media: MediaStorage=None,
+        default_dir: str=None):
         if load_dir is not None:
             self.load(load_dir)
             return
