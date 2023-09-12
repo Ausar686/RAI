@@ -1,9 +1,7 @@
-numpy
-openai
-orjson
-pandas
-pydantic
-requests
-tiktoken
-notebook==6.*
-jupyterlab
+numpy==1.25.2
+openai==0.28.0
+orjson==3.9.7
+pandas==2.1.0
+pydantic==2.3.0
+requests==2.31.0
+tiktoken==0.5.0
