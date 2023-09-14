@@ -7,15 +7,12 @@ import json
 import os
 import re
 
-import openai
-from openai.openai_object import OpenAIObject
-
 from .token_counter import TokenCounter
 from .text_summarizer import TextSummarizer
 from ..chat import  Chat, Message
 from ..containers import RDict 
 from ..profile import Profile
-from ..utils import method_logger, retry
+from ..utils import method_logger, retry, to_rdict, request_openai
 
 
 class ChatBot:
@@ -23,41 +20,40 @@ class ChatBot:
     RAI class for chat-like interaction with OpenAI API using customizable set of actors.
     """
     
-    _defaults = RDict(None, {
-        "openai": RDict(None, {
+    _defaults = RDict({
+        "openai": RDict({
             "api_key": None,
             "model": "gpt-3.5-turbo",
             "temperature": 0,
             "stream": False,
             "n": 1,
-            "time_sleep": 2,
         }),
-        "limits": RDict(None, {
+        "limits": RDict({
             "gpt-3.5-turbo": 3000,
             "gpt-3.5-turbo-16k": 15000,
             "gpt-4": 7000,
             "gpt-4-32k": 31000
         }),
-        "upgrades": RDict(None, {
+        "upgrades": RDict({
             "gpt-3.5-turbo": "gpt-3.5-turbo-16k",
             "gpt-4": "gpt-4-32k"
         }),
-        "downgrades": RDict(None, {
+        "downgrades": RDict({
             "gpt-3.5-turbo-16k": "gpt-3.5-turbo",
             "gpt-4-32k": "gpt-4"
         }),
-        "chat": RDict(None, {
+        "chat": RDict({
             "username": "DefaultUser",
             "bot_name": "DefaultBot"
         }),
-        "text_summarizer": RDict(None, {
+        "text_summarizer": RDict({
             "model": "gpt-3.5-turbo",
             "n_words": 50
         }),
-        "token_counter": RDict(None, {
+        "token_counter": RDict({
             "model": "gpt-3.5-turbo"
         }),
-        "qagpt": RDict(None, {
+        "qagpt": RDict({
             "model": "gpt-3.5-turbo",
             "temperature": 0,
             "stream": False,
@@ -114,7 +110,7 @@ class ChatBot:
         # Setup usable functions from config.
         self.functions_from_config(functions_config_path)
         # Initialize dialog attributes
-        self.init_messages(profile)
+        self.init_messages(profile, chat)
         # Validate initialization
         self.validate_init()
         return
@@ -151,7 +147,7 @@ class ChatBot:
         # Set attribute as a key in self.parameters dict
         # if it's not present yet
         if not hasattr(self, section):
-            self.parameters[section] = RDict(str)
+            self.parameters[section] = RDict()
         for option, value in section_data.items():
             self.process_option(section, option, value)
         return
@@ -217,7 +213,6 @@ class ChatBot:
             self.openai.api_key = os.getenv("OPENAI_API_KEY")
         if self.openai.api_key is None:
             raise ValueError(self._api_key_error)
-        openai.api_key = self.openai.api_key
         # Set environmental variable to prevent overriding by further imports
         os.environ["OPENAI_API_KEY"] = self.openai.api_key
         return
@@ -465,81 +460,41 @@ class ChatBot:
         return
     
     @retry(5)
-    def get_completion(self) -> OpenAIObject:
+    def get_completion(self) -> RDict:
         """
         Sends context to OpenAI API and receives response from it as a completion.
         """
-        completion = openai.ChatCompletion.create(
-            messages=self.context,
-            model=self.openai.model,
-            temperature=self.openai.temperature,
-            stream=self.openai.stream,
-            n=self.openai.n
-        )
+        json_data = request_openai(messages=self.context, **self.openai)
+        completion = to_rdict(json_data)
         return completion
     
     @retry(5)
-    async def aget_completion(self) -> OpenAIObject:
-        """
-        (ASYNC) Sends context to OpenAI API and receives response from it as a completion.
-        """
-        completion = await openai.ChatCompletion.acreate(
-            messages=self.context,
-            model=self.openai.model,
-            temperature=self.openai.temperature,
-            stream=self.openai.stream,
-            n=self.openai.n
-        )
-        return completion
-    
-    @retry(5)
-    def fget_completion(self) -> OpenAIObject:
+    def fget_completion(self) -> RDict:
         """
         Sends context to OpenAI API and receives response from it as a completion.
         Response CAN contain a function call from self.usable_functions.
         """
         if self.usable_functions is None:
             return self.get_completion()
-        completion = openai.ChatCompletion.create(
+        json_data = request_openai(
+            functions=self.usable_functions,
             messages=self.context,
-            model=self.openai.model,
-            temperature=self.openai.temperature,
-            stream=self.openai.stream,
-            n=self.openai.n,
-            functions=self.usable_functions
-        )
-        return completion
-    
-    @retry(5)
-    async def afget_completion(self) -> OpenAIObject:
-        """
-        (ASYNC) Sends context to OpenAI API and receives response from it as a completion.
-        Response CAN contain a function call from self.usable_functions.
-        """
-        if self.usable_functions is None:
-            return await self.aget_completion()
-        completion = await openai.ChatCompletion.acreate(
-            messages=self.context,
-            model=self.openai.model,
-            temperature=self.openai.temperature,
-            stream=self.openai.stream,
-            n=self.openai.n,
-            functions=self.usable_functions
-        )
+            **self.openai)
+        completion = to_rdict(json_data)
         return completion
     
     @staticmethod
-    def completion_to_openai_message_list(completion: OpenAIObject) -> list:
+    def completion_to_openai_message_list(completion: RDict) -> list:
         """
-        Converts OpenAI Completion (OpenAIObject) to a list of choices.
+        Converts OpenAI Completion (RDict) to a list of choices.
         """
         lst = [choice.message for choice in completion.choices]
         return lst
     
     @staticmethod
-    def openai_message_list_to_dict(lst: list) -> OpenAIObject:
+    def openai_message_list_to_dict(lst: list) -> RDict:
         """
-        Converts list of messages to an OpenAIObject:
+        Converts list of messages to a RDict:
         {"role": role, "content": content}
         """
         # [TODO]: Add proper processing of several generated variants
@@ -553,7 +508,7 @@ class ChatBot:
         re_text = re.sub(r"(\n+?)\d+\.\s*(.*?)", r"\n\2", text)
         return re_text
     
-    def call_from_completion(self, completion: OpenAIObject) -> Any:
+    def call_from_completion(self, completion: RDict) -> Any:
         """
         Calls function from OpenAI Completion.
         Raises ValueError if function is not presented in self.usable_functions
@@ -570,24 +525,7 @@ class ChatBot:
         msg = self.bot_message(content)
         return msg
     
-    async def acall_from_completion(self, completion: OpenAIObject) -> Any:
-        """
-        (ASYNC) Calls function from OpenAI Completion.
-        Raises ValueError if function is not presented in self.usable_functions
-        """
-        # [TODO]: Add processing of multiple choices.
-        message = completion.choices[0].message
-        call_data = message.function_call
-        func_name = call_data.name
-        if func_name not in self._usable_functions_names:
-            raise ValueError(f"Function {func_name} is not available to call.")
-        arg_string = call_data.arguments
-        kwargs = json.loads(arg_string)
-        content = eval(f"await self.{func_name}(**{kwargs})")
-        msg = self.bot_message(content)
-        return msg
-    
-    def completion_to_message(self, completion: OpenAIObject) -> Message:
+    def completion_to_message(self, completion: RDict) -> Message:
         """
         Converts OpenAI Completion into a Message
         """
@@ -597,7 +535,7 @@ class ChatBot:
         msg = Message(msg_dct)
         return msg
     
-    def process_completion(self, completion: OpenAIObject) -> Any:
+    def process_completion(self, completion: RDict) -> Any:
         """
         Processes the completion.
         If function call is required, calls it and returns the result.
@@ -610,20 +548,6 @@ class ChatBot:
             return self.call_from_completion(completion)
         else:
             raise ValueError(f"Invalid value of 'finish_reason': {finish_reason}")
-            
-    async def aprocess_completion(self, completion: OpenAIObject) -> Any:
-        """
-        (ASYNC) Processes the completion.
-        If function call is required, calls it and returns the result.
-        """
-        # [TODO]: Add processing of multiple choices.
-        finish_reason = completion.choices[0].finish_reason
-        if finish_reason == "stop":
-            return self.completion_to_message(completion)
-        elif finish_reason == "function_call":
-            return await self.acall_from_completion(completion)
-        else:
-            raise ValueError(f"Invalid value of 'finish_reason': {finish_reason}")
     
     def get_answer(self) -> Message:
         """
@@ -631,14 +555,6 @@ class ChatBot:
         """
         completion = self.get_completion()
         msg = self.process_completion(completion) 
-        return msg
-    
-    async def aget_answer(self) -> Message:
-        """
-        (ASYNC) Full pipeline of answer obtaining from OpenAI API.
-        """
-        completion = await self.aget_completion()
-        msg = await self.aprocess_completion(completion) 
         return msg
 
     def fget_answer(self) -> Message:
@@ -652,18 +568,6 @@ class ChatBot:
             return msg
         except Exception:
             return self.get_answer()
-    
-    async def afget_answer(self) -> Message:
-        """
-        (ASYNC) Full pipeline of answer obtaining from OpenAI API.
-        """
-        # [TODO]: Add proper exception handling
-        try:
-            completion = await self.afget_completion()
-            msg = await self.aprocess_completion(completion) 
-            return msg
-        except Exception:
-            return await self.aget_answer()
 
     @property
     def last_message_fstring(self) -> str:

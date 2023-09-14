@@ -6,9 +6,9 @@ import os
 import re
 import time
 
-import openai
-
 from .base_actor import BaseActor
+from ..containers.rdict import RDict
+from ..utils import request_openai, to_rdict
 
 
 class QAGPT(BaseActor):
@@ -38,15 +38,17 @@ class QAGPT(BaseActor):
             n (int): Number of answers to generate. NOTE: Each answer consumes tokens. Default: 1. 
         """
         super().__init__(model)
-        self.set_api_key(key)
-        self.temperature = temperature
         if stream:
             raise NotImplementedError("Streaming option coming soon...")
         if n > 1:
             raise NotImplementedError("Multiple output coming soon...")
-        self.temperature = temperature
-        self.stream = stream
-        self.n = n
+        # Init OpenAI parameters
+        self.openai = RDict()
+        self.set_api_key(key)
+        self.openai.model = self.model
+        self.openai.temperature = temperature
+        self.openai.stream = stream
+        self.openai.n = n
         self._info = f"Instance of wrapping class around OpenAI API to simplify development and automatic usage.\nModel version: {self.model}"
         self._sleep_time = 2
         self._supported_types = ['int', 'float', 'list', 'dict', 'str']
@@ -58,20 +60,28 @@ class QAGPT(BaseActor):
         self._wrap_dict_string = "Write the answer in Python dictionary notation. Write only the pairs key:value from the dictionary, separated by newline symbol."
         self._wrap_list_string = "Write only the list. Each element of the list should be written on a separate line."
         
-    @staticmethod
-    def set_api_key(key: str) -> None:
+    def set_api_key(self, key: str) -> None:
         """
-        Static method, that sets openai.api_key value.
+        Method, that sets openai.api_key value.
         The API key is set only if it was None before calling the method. 
         Args:
             key (str): Value, that should be set as openai.api_key. If key is None gets an environmental variable 'OPENAI_API_KEY'
         Returns:
             None
         """
-        if openai.api_key is None:
-            if key is None:
-                key = os.getenv("OPENAI_API_KEY")
-            openai.api_key = key
+        if key is None:
+            key = os.getenv("OPENAI_API_KEY")
+        self.openai.api_key = key
+        return
+
+    def set_model(self, model: str) -> None:
+        """
+        Override for a base class method in order to remain compatible 
+        with new format of RDict 'openai' as an attribute
+        """
+        super().set_model(model)
+        if hasattr(self, "openai"):
+            self.openai.model = model
         return
         
     def form_message(self, request: str, role: str="user") -> dict:
@@ -108,13 +118,8 @@ class QAGPT(BaseActor):
         Reurns:
             answer (str): Model response in string format.
         """
-        completion = openai.ChatCompletion.create(
-          model=self.model,
-          messages=messages,
-          temperature=self.temperature,
-          n=self.n,
-          stream=self.stream,
-        )
+        json_data = request_openai(messages=messages, **self.openai)
+        completion = to_rdict(json_data)
         answer = completion.choices[0].message.content
         return answer
     

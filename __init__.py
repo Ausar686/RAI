@@ -5,7 +5,6 @@ from .actors import *
 from .chat import *
 from .containers import *
 from .heuristics import *
-from .media import *
 from .profile import *
 from .storages import *
 from .utils import *

@@ -2,15 +2,16 @@
 # https://github.com/Ausar686
 
 from typing import Any
-from collections import defaultdict
 
 
-class RDict(defaultdict):
+class RDict(dict):
     """
-    RAI wrapper class for defaultdict, which implements attribute addressing
+    RAI wrapper class for dict, which implements attribute addressing
     in addition to item addressing.
+    RDict also implements __missing__ method, so that not to raise errors
+    on non-existent keys and return None instead.
     Example:
-        dct = RDict(str)
+        dct = RDict()
         dct["a"] = 123
         print(dct.a)
         >>> 123
@@ -18,14 +19,14 @@ class RDict(defaultdict):
         Do NOT use basic method names as the keys, because it will not work properly if
         you address to them via attribute.
         Example:
-            dct = RDict(str)
+            dct = RDict()
             dct["keys"] = 1234
             print(dct.keys)
             >>> <function RDict.keys> # There exists a default dict method, called 'keys'
         To obtain basic attributes' and methods' names use this:
-            print(dir(defaultdict()))
+            print(dir(dict()))
         Or:
-            print(defaultdict().__dict__)
+            print(dict().__dict__)
     """
     
     def __init__(self, *args, **kwargs):
@@ -55,3 +56,9 @@ class RDict(defaultdict):
             return self.get(attr)
         else:
             raise AttributeError("Attribute does not exist.")
+
+    def __missing__(self, key: Any) -> None:
+        """
+        Returns None if key is not present in the dictionary.
+        """
+        return None
